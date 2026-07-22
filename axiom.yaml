@@ -1,5 +1,5 @@
 name: christiangeorgelucas/text-shaping-tools
-version: 0.1.0
+version: 0.1.1
 language: python
 description: Composable text-shaping and OpenType font-introspection nodes wrapping HarfBuzz (the shaping engine behind Chrome, Android, and LibreOffice) via its official Python binding uharfbuzz (Apache-2.0; HarfBuzz itself "Old MIT" -- both permissive, verified from source). Shape a Unicode string with a font into a positioned glyph run (glyph IDs, cluster indices, x/y advances/offsets), Unicode-aware and OpenType-feature-aware across simple and complex scripts (Arabic joining, ligatures, kerning, contextual alternates). Also introspect a font's OpenType layout features and scripts, global and per-glyph metrics, name table, variable-font axes, and subset a font down to only the glyphs a given text needs. Eight nodes, one canonical Font envelope (font_data capped at 2 MiB, conservative headroom under Axiom's node transport ceiling), all stateless and deterministic -- no network, no wall-clock, no randomness, and buffer language is never inferred from the host OS locale (a common HarfBuzz-integration pitfall that would make output depend on where the node happens to run).
 license: MIT

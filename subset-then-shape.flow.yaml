@@ -9,10 +9,10 @@ description: "Subset a font to the glyphs a text needs, then shape that text wit
 
 nodes:
   - alias: subset
-    package: christiangeorgelucas/text-shaping-tools@0.1.0
+    package: christiangeorgelucas/text-shaping-tools@0.1.1
     node: SubsetFont
   - alias: shape
-    package: christiangeorgelucas/text-shaping-tools@0.1.0
+    package: christiangeorgelucas/text-shaping-tools@0.1.1
     node: ShapeText
 
 edges:
