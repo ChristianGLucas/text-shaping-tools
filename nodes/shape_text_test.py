@@ -1,5 +1,4 @@
 from gen.messages_pb2 import Font, FeatureSetting, ShapeTextRequest
-from nodes._common import MAX_FONT_BYTES
 from nodes.shape_text import shape_text
 from nodes.testkit import FakeAxiomContext, dejavu_sans_bytes, dejavu_sans_font
 
@@ -68,13 +67,6 @@ def test_shape_text_empty_text_is_structured_error():
     assert len(result.glyphs) == 0
 
 
-def test_shape_text_oversized_text_is_structured_error():
-    ax = FakeAxiomContext()
-    huge = "a" * 10_001
-    result = shape_text(ax, ShapeTextRequest(font=dejavu_sans_font(), text=huge))
-    assert result.error.code == "TOO_LARGE"
-
-
 def test_shape_text_invalid_font_is_structured_error_not_a_crash():
     ax = FakeAxiomContext()
     bad_font = Font(font_data=b"not a font, just garbage bytes 1234567890")
@@ -100,36 +92,6 @@ def test_shape_text_malformed_script_tag_is_rejected_not_truncated():
         ax, ShapeTextRequest(font=dejavu_sans_font(), text="a", script="toolong")
     )
     assert result.error.code == "INVALID_ARGUMENT"
-
-
-def test_shape_text_oversized_font_is_structured_error():
-    """Regression guard for the size cap itself (now 11 MiB raw, up from
-    the platform-ingress-workaround-era 640 KiB -- see nodes/_common.py):
-    one byte over MAX_FONT_BYTES must still cleanly TOO_LARGE rather than
-    being handed to HarfBuzz.
-    """
-    ax = FakeAxiomContext()
-    base = dejavu_sans_bytes()
-    oversized = base + b"0" * (MAX_FONT_BYTES - len(base) + 1)
-    assert len(oversized) == MAX_FONT_BYTES + 1
-    result = shape_text(ax, ShapeTextRequest(font=Font(font_data=oversized), text="a"))
-    assert result.error.code == "TOO_LARGE"
-
-
-def test_shape_text_font_just_under_cap_is_accepted():
-    """The boundary just under the (now 11 MiB) cap must NOT be rejected --
-    guards against an off-by-one that would silently re-shrink the
-    effective cap below MAX_FONT_BYTES.
-    """
-    ax = FakeAxiomContext()
-    base = dejavu_sans_bytes()
-    padded = base + b"0" * (MAX_FONT_BYTES - len(base))
-    assert len(padded) == MAX_FONT_BYTES
-    result = shape_text(ax, ShapeTextRequest(font=Font(font_data=padded), text="a"))
-    # Padding with trailing garbage after a valid sfnt still parses fine --
-    # HarfBuzz reads tables by directory offset/length, not by trusting
-    # EOF -- so this exercises the size gate, not font validity.
-    assert result.error.code == ""
 
 
 def test_shape_text_out_of_range_face_index_is_rejected():

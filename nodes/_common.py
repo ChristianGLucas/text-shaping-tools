@@ -2,29 +2,19 @@
 #
 # Every node wraps HarfBuzz (via uharfbuzz) for one distinct capability —
 # this module centralizes the repeated boilerplate: font-blob validation
-# and parsing, size caps, error construction, and the raw-units-vs-scaled
-# font_size convention shared by ShapeText and GetGlyphMetrics.
+# and parsing, error construction, and the raw-units-vs-scaled font_size
+# convention shared by ShapeText and GetGlyphMetrics.
+#
+# A node is a pure input->output function. Bounding request size/cost/
+# memory/DoS is the platform's job (ingress + gateway + sidecar payload
+# limits, sandboxed pod memory/CPU/time) -- this package imposes no size
+# or element-count caps of its own. What this module DOES validate is
+# domain correctness: is font_data actually a parseable sfnt font, is a
+# required field present at all.
 
 import uharfbuzz as hb
 
 from gen.messages_pb2 import Error
-
-# A font blob is untrusted input the caller fully controls; bound its size
-# before any parsing happens. The deployed invocation ingress supports a
-# 16 MiB request body (nginx client_max_body_size 64m, gRPC message cap
-# 24 MiB -- the platform's own 16 MiB invoke-payload limit is the binding
-# constraint). The JSON bridge base64-encodes `bytes` fields (~+33% over
-# the wire), so 11 MiB raw -> ~14.67 MiB base64, leaving ~1.3 MiB of
-# headroom under the 16 MiB ceiling for the rest of the request (other
-# fields, JSON structure). That comfortably covers real CJK/variable
-# fonts. A caller with a still-larger font should subset it first with
-# this package's own SubsetFont node.
-MAX_FONT_BYTES = 11 * 1024 * 1024
-
-# Shaping/metric cost scales with text length; bound it before any
-# HarfBuzz call. 10,000 UTF-16 code units is ample for any single
-# paragraph/label/caption a caller would send in one node invocation.
-MAX_TEXT_CHARS = 10_000
 
 # Never inferred from the host OS locale (see messages.proto DETERMINISM
 # note) — this is the fixed default when a caller leaves `language` empty.
@@ -37,16 +27,10 @@ def make_error(code: str, message: str) -> Error:
     return Error(code=code, message=message)
 
 
-def too_large_error(what: str, limit: int) -> Error:
-    return make_error("TOO_LARGE", f"{what} exceeds the {limit}-byte/char cap")
-
-
 def check_text(text: str, field_name: str = "text"):
     """Validate a text field. Returns an Error, or None if it's fine."""
     if not text:
         return make_error("EMPTY_INPUT", f"{field_name} was empty")
-    if len(text) > MAX_TEXT_CHARS:
-        return too_large_error(field_name, MAX_TEXT_CHARS)
     return None
 
 
@@ -77,8 +61,6 @@ def load_font(font_msg):
     data = font_msg.font_data
     if not data:
         return None, make_error("EMPTY_INPUT", "font.font_data was empty")
-    if len(data) > MAX_FONT_BYTES:
-        return None, too_large_error("font.font_data", MAX_FONT_BYTES)
     if font_msg.face_index < 0:
         return None, make_error("INVALID_ARGUMENT", "font.face_index must be >= 0")
 

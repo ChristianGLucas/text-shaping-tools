@@ -17,7 +17,7 @@ modification, and redistribution.
 
 | Font | License | Source |
 |---|---|---|
-| DejaVu Sans, subsetted to printable ASCII + fi/fl (`DejaVuSans-subset.ttf`, produced with this package's own `SubsetFont`/HarfBuzz subsetter, `retain_layout_tables=true`, to stay under the package's own font-size cap) | Bitstream Vera License (public-domain-like, permissive; DejaVu's own changes are public domain; the license explicitly permits merging/modifying/redistributing) | [dejavu-fonts/dejavu-fonts](https://github.com/dejavu-fonts/dejavu-fonts); full license text captured at `tests/fixtures/DejaVu-LICENSE.txt`. |
+| DejaVu Sans, subsetted to printable ASCII + fi/fl (`DejaVuSans-subset.ttf`, produced with this package's own `SubsetFont`/HarfBuzz subsetter, `retain_layout_tables=true`, kept small for a fast test fixture) | Bitstream Vera License (public-domain-like, permissive; DejaVu's own changes are public domain; the license explicitly permits merging/modifying/redistributing) | [dejavu-fonts/dejavu-fonts](https://github.com/dejavu-fonts/dejavu-fonts); full license text captured at `tests/fixtures/DejaVu-LICENSE.txt`. |
 | Comfortaa Variable (`Comfortaa-Variable.ttf`, renamed from `Comfortaa[wght].ttf`) | SIL Open Font License 1.1 | [google/fonts](https://github.com/google/fonts/tree/main/ofl/comfortaa); full license text captured at `tests/fixtures/Comfortaa-OFL.txt`. |
 
 Both are used exactly as intended by their licenses: bundled with software,

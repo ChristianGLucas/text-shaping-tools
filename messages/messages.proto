@@ -37,16 +37,6 @@ package christiangeorgelucas.text_shaping_tools;
 // INVALID_FONT error, never a crash — HarfBuzz degrades to an empty face
 // (glyph_count 0), which every node detects explicitly.
 //
-// SIZE BOUND. `font_data` is capped at 11 MiB and `text` is capped at
-// 10,000 UTF-16 code units. The font cap tracks the deployed invocation
-// ingress's 16 MiB request-body ceiling: the JSON/HTTP bridge
-// base64-encodes `bytes` fields (~+33% over the wire), so 11 MiB raw
-// becomes ~14.67 MiB base64, leaving headroom under that ceiling for the
-// rest of the request -- comfortably covering real CJK and variable
-// fonts. A caller with a still-larger font should subset it first with
-// SubsetFont. Oversized input returns a structured TOO_LARGE error
-// before any parsing/shaping work begins.
-//
 // DETERMINISM. Every node is a pure function of its input fields. Unlike a
 // naive HarfBuzz integration, buffer language is NEVER inferred from the
 // host process's locale (HarfBuzz's own hb_buffer_guess_segment_properties
@@ -63,7 +53,6 @@ package christiangeorgelucas.text_shaping_tools;
 // A structured, deterministic failure. Unset on success.
 message Error {
   // Stable machine-readable code. One of:
-  //   TOO_LARGE        — font_data or text exceeded its size cap.
   //   INVALID_FONT     — font_data could not be parsed as a supported
   //                      sfnt font (or face_index is out of range for a
   //                      collection); HarfBuzz produced an empty face.
@@ -81,8 +70,7 @@ message Error {
 
 // A font, as raw bytes plus which face to use if it is a collection.
 message Font {
-  // Raw font file bytes (TTF/OTF/TTC). Capped at 11 MiB -- subset a
-  // larger font first with SubsetFont.
+  // Raw font file bytes (TTF/OTF/TTC).
   bytes font_data = 1;
   // Index of the face to use within a TTC/collection. 0 for an ordinary
   // single-face font (the default and common case).
@@ -129,7 +117,7 @@ message GlyphInfo {
 
 message ShapeTextRequest {
   Font font = 1;
-  // Text to shape. Capped at 10,000 UTF-16 code units.
+  // Text to shape.
   string text = 2;
   // ISO 15924 script tag (e.g. "Latn", "Arab", "Deva"). Empty = infer
   // from the Unicode text (deterministic; never from OS locale).
@@ -254,8 +242,7 @@ message GetGlyphMetricsRequest {
   // Each character in this string is looked up independently via the
   // font's cmap (nominal glyph mapping) — NOT shaped, so no ligatures/
   // reordering/positioning are applied. Use ShapeText for that; use this
-  // node to inspect a font's raw per-character metrics. Capped at 10,000
-  // UTF-16 code units.
+  // node to inspect a font's raw per-character metrics.
   string text = 2;
   // Scale metrics to this size (same unit convention as
   // ShapeTextRequest.font_size). 0 (default) returns raw font units.
@@ -350,8 +337,8 @@ message SubsetFontRequest {
   // Retain only the glyphs needed to render this text (looked up via
   // cmap, plus everything HarfBuzz's subsetter determines is needed to
   // keep those glyphs shaping correctly, e.g. ligature/mark-attachment
-  // closure). Capped at 10,000 UTF-16 code units. At least one of `text`
-  // or `unicode_codepoints` must be non-empty.
+  // closure). At least one of `text` or `unicode_codepoints` must be
+  // non-empty.
   string text = 2;
   // Additional/alternative code points to retain, as raw Unicode scalar
   // values, for callers that already have a code-point set rather than a

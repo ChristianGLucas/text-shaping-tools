@@ -3,7 +3,7 @@ import uharfbuzz as hb
 from gen.messages_pb2 import SubsetFontRequest, SubsetFontResponse
 from gen.axiom_context import AxiomContext
 
-from nodes._common import MAX_TEXT_CHARS, check_text, load_font, make_error, too_large_error
+from nodes._common import check_text, load_font, make_error
 
 # Tables it's safe to drop for the "smallest possible" (retain_layout_tables
 # = false) subset -- the caller asked for glyphs to render, not to shape or
@@ -37,11 +37,6 @@ def subset_font(ax: AxiomContext, input: SubsetFontRequest) -> SubsetFontRespons
         text_error = check_text(input.text)
         if text_error is not None:
             return SubsetFontResponse(error=text_error)
-
-    if len(input.unicode_codepoints) > MAX_TEXT_CHARS:
-        return SubsetFontResponse(
-            error=too_large_error("unicode_codepoints", MAX_TEXT_CHARS)
-        )
 
     loaded, font_error = load_font(input.font)
     if font_error is not None:
