@@ -1,0 +1,25 @@
+# Axiom flow — composes published nodes into a graph.
+# Demonstrates real cross-node composability within
+# christiangeorgelucas/text-shaping-tools: subset a font down to only the
+# glyphs a piece of text needs, then shape that same text with the
+# (much smaller) subsetted font -- a genuinely useful two-step pipeline
+# for passing fonts between distributed steps.
+name: subset-then-shape
+description: "Subset a font to the glyphs a text needs, then shape that text with the subsetted font."
+
+nodes:
+  - alias: subset
+    package: christiangeorgelucas/text-shaping-tools@0.1.0
+    node: SubsetFont
+  - alias: shape
+    package: christiangeorgelucas/text-shaping-tools@0.1.0
+    node: ShapeText
+
+edges:
+  - from: subset
+    to: shape
+    adapter:                          # keyed by SOURCE expression -> destination field path
+      "subset_font_data": "font.font_data"
+      "literal(\"fi\")": "text"
+
+start: subset

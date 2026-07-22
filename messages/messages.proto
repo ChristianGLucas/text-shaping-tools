@@ -1,0 +1,374 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.text_shaping_tools;
+
+// Data contracts for christiangeorgelucas/text-shaping-tools — stateless,
+// deterministic text shaping and OpenType font introspection, wrapping
+// HarfBuzz (the industry-standard shaping engine used by Chrome, Android,
+// LibreOffice, and most modern text stacks) via its official Python binding
+// `uharfbuzz` (Apache-2.0; HarfBuzz itself is "Old MIT"; both permissive,
+// verified from source). HarfBuzz owns every hard part: Unicode script/
+// direction resolution, complex-script shaping (Arabic joining, Indic
+// reordering, etc.), GSUB/GPOS OpenType-feature application (ligatures,
+// kerning, contextual alternates), and font-table introspection.
+//
+// SUPPORTED FONT FORMATS. Raw SFNT-based fonts only: TrueType (.ttf),
+// OpenType/CFF (.otf), and TrueType/OpenType Collections (.ttc, via
+// face_index). WOFF/WOFF2 web-font wrappers are NOT unwrapped — HarfBuzz
+// itself has no WOFF decompressor; feed it raw sfnt bytes. An unparseable
+// font (wrong format, truncated, garbage) yields a structured
+// INVALID_FONT error, never a crash — HarfBuzz degrades to an empty face
+// (glyph_count 0), which every node detects explicitly.
+//
+// SIZE BOUND. `font_data` is capped at 2 MiB (comfortably covers a normal
+// desktop/web font, including a modest variable font) and `text` is capped
+// at 10,000 UTF-16 code units. The 2 MiB font cap is deliberately
+// conservative relative to Axiom's own ~4 MiB node transport ceiling,
+// because the JSON/HTTP bridge base64-encodes `bytes` fields (~+33% over
+// the wire) -- a naive 3 MiB cap would land right at that ceiling instead
+// of comfortably under it. Oversized input returns a structured TOO_LARGE
+// error before any parsing/shaping work begins.
+//
+// DETERMINISM. Every node is a pure function of its input fields. Unlike a
+// naive HarfBuzz integration, buffer language is NEVER inferred from the
+// host process's locale (HarfBuzz's own hb_buffer_guess_segment_properties
+// falls back to the OS locale for language, which is an environment leak,
+// not a text property) — an explicit `language` field is always set before
+// shaping (defaulting to "en" when the caller leaves it empty), so output
+// is identical across hosts/environments for the same input. Script and
+// direction, when left empty, ARE inferred from the Unicode text itself
+// (a deterministic function of the codepoints, not the environment).
+//
+// ERROR CONTRACT. Every output message carries an `Error error` field,
+// unset on success. On error, all other fields are unset/zero-valued.
+
+// A structured, deterministic failure. Unset on success.
+message Error {
+  // Stable machine-readable code. One of:
+  //   TOO_LARGE        — font_data or text exceeded its size cap.
+  //   INVALID_FONT     — font_data could not be parsed as a supported
+  //                      sfnt font (or face_index is out of range for a
+  //                      collection); HarfBuzz produced an empty face.
+  //   INVALID_ARGUMENT — a non-content argument is malformed (e.g. a
+  //                      script/direction/feature tag with the wrong
+  //                      shape, or a face_index < 0).
+  //   EMPTY_INPUT      — a required field was empty (e.g. no text to
+  //                      shape, no codepoints to look up).
+  //   SUBSET_FAILED    — HarfBuzz's subsetter could not produce a subset
+  //                      (e.g. the retained glyph set is empty).
+  string code = 1;
+  // Human-readable detail for logs/debugging.
+  string message = 2;
+}
+
+// A font, as raw bytes plus which face to use if it is a collection.
+message Font {
+  // Raw font file bytes (TTF/OTF/TTC). Capped at 3 MiB.
+  bytes font_data = 1;
+  // Index of the face to use within a TTC/collection. 0 for an ordinary
+  // single-face font (the default and common case).
+  int32 face_index = 2;
+}
+
+// One explicit OpenType feature setting to apply during shaping.
+message FeatureSetting {
+  // 4-letter OpenType feature tag, e.g. "liga", "kern", "smcp", "dlig".
+  string tag = 1;
+  // 0 disables the feature, 1 (or any positive value) enables it; some
+  // features (e.g. stylistic alternates "ssXX") use higher values to pick
+  // a specific alternate.
+  int32 value = 2;
+  // Cluster range this setting applies to: [start, end). Both 0 (the
+  // default) means "the whole text".
+  uint32 start = 3;
+  uint32 end = 4;
+}
+
+// One shaped glyph: its identity in the font plus how to place it.
+message GlyphInfo {
+  // Glyph ID (index into the font's glyph table — NOT a Unicode code
+  // point; the same codepoint can map to different glyph IDs in
+  // different fonts).
+  uint32 glyph_id = 1;
+  // The glyph's name from the font's `post`/CFF charstring table, or a
+  // synthesized "gidNNNN" if the font has no glyph names.
+  string glyph_name = 2;
+  // Index of the first source character (UTF-16 code unit offset into
+  // `text`) that produced this glyph. Multiple glyphs can share a
+  // cluster (one character -> many glyphs) and multiple characters can
+  // collapse into one glyph's cluster (ligatures).
+  uint32 cluster = 3;
+  // How far to advance the pen after drawing this glyph, in the
+  // horizontal and vertical directions.
+  double x_advance = 4;
+  double y_advance = 5;
+  // Offset to apply to this glyph's drawing position before advancing
+  // (used by mark positioning/kerning adjustments).
+  double x_offset = 6;
+  double y_offset = 7;
+}
+
+message ShapeTextRequest {
+  Font font = 1;
+  // Text to shape. Capped at 10,000 UTF-16 code units.
+  string text = 2;
+  // ISO 15924 script tag (e.g. "Latn", "Arab", "Deva"). Empty = infer
+  // from the Unicode text (deterministic; never from OS locale).
+  string script = 3;
+  // BCP 47 language tag (e.g. "en", "ar", "en-GB"). Empty defaults to
+  // "en" — deliberately never inferred from the host's OS locale, to
+  // keep shaping output identical across deployment environments.
+  string language = 4;
+  // Text direction: "ltr", "rtl", "ttb", or "btt". Empty = infer from
+  // the resolved script (deterministic).
+  string direction = 5;
+  // Explicit OpenType feature settings (in addition to the shaper's
+  // normal default feature set for the resolved script).
+  repeated FeatureSetting features = 6;
+  // Font size to scale advances/offsets to (in the font's natural unit,
+  // e.g. pixels or points — the caller's choice of unit, HarfBuzz is
+  // unit-agnostic). 0 (default) returns raw font design units (typically
+  // 1000 or 2048 units per em; see GetFontMetrics.units_per_em).
+  float font_size = 7;
+}
+
+message ShapeTextResponse {
+  repeated GlyphInfo glyphs = 1;
+  // The script/language/direction actually used for shaping, after
+  // defaulting/inference — lets the caller see what was resolved when
+  // they left a field empty.
+  string resolved_script = 2;
+  string resolved_language = 3;
+  string resolved_direction = 4;
+  // Sum of all glyphs' x_advance / y_advance — the total width/height of
+  // the shaped run, handy for layout without re-summing glyphs.
+  double total_advance_x = 5;
+  double total_advance_y = 6;
+  Error error = 7;
+}
+
+message ListFontFeaturesRequest {
+  Font font = 1;
+}
+
+// The set of OpenType layout features available for one script.
+message ScriptFeatures {
+  // OpenType script tag as found in the font's GSUB/GPOS ScriptList
+  // (e.g. "latn", "arab", "DFLT").
+  string script_tag = 1;
+  // BCP-47-ish language tags found under this script (harfbuzz's OpenType
+  // language tags, e.g. "ENG", "dflt") — the font's own declared
+  // languages, not a Unicode locale list.
+  repeated string languages = 2;
+  // Substitution features (ligatures, alternates, etc.) declared for this
+  // script's default language system.
+  repeated string gsub_features = 3;
+  // Positioning features (kerning, mark attachment, etc.) declared for
+  // this script's default language system.
+  repeated string gpos_features = 4;
+}
+
+message ListFontFeaturesResponse {
+  repeated ScriptFeatures scripts = 1;
+  // Union of every GSUB feature tag found across all scripts — the
+  // quick "does this font support ligatures at all" answer.
+  repeated string all_gsub_features = 2;
+  repeated string all_gpos_features = 3;
+  Error error = 4;
+}
+
+message ListFontScriptsRequest {
+  Font font = 1;
+}
+
+// One script the font's layout tables declare support for.
+message ScriptInfo {
+  // Raw 4-character OpenType script tag as it appears in the font
+  // (e.g. "latn", "arab", "DFLT").
+  string ot_tag = 1;
+  // The corresponding ISO 15924 script tag HarfBuzz resolves it to (e.g.
+  // "Latn", "Arab"), or empty if the OT tag doesn't map to a known
+  // Unicode script (e.g. "DFLT", "math").
+  string iso15924 = 2;
+}
+
+message ListFontScriptsResponse {
+  // Union of scripts declared in either the GSUB or GPOS table.
+  repeated ScriptInfo scripts = 1;
+  Error error = 2;
+}
+
+message GetFontMetricsRequest {
+  Font font = 1;
+}
+
+message FontMetrics {
+  // Units per em — the font's internal coordinate grid size (commonly
+  // 1000 for CFF/PostScript fonts, 2048 for many TrueType fonts). Every
+  // raw-font-unit value from any node in this package (when font_size is
+  // left at 0) is on this scale.
+  int32 units_per_em = 1;
+  // Recommended typographic ascender/descender/line-gap, in font units,
+  // for default horizontal-direction line layout.
+  int32 ascender = 2;
+  int32 descender = 3;
+  int32 line_gap = 4;
+  // Total number of glyphs defined in the font.
+  int32 num_glyphs = 5;
+  // Whether the font is an OpenType Variable Font (has an `fvar` table
+  // with one or more variation axes) — see GetVariableFontAxes.
+  bool is_variable = 6;
+  // Whether the font declares any GSUB substitution / GPOS positioning
+  // rules at all (a font can be a valid, shapeable sfnt with neither —
+  // shaping still works via cmap + hmtx, just without ligatures/kerning).
+  bool has_substitution = 7;
+  bool has_positioning = 8;
+}
+
+message GetFontMetricsResponse {
+  FontMetrics metrics = 1;
+  Error error = 2;
+}
+
+message GetGlyphMetricsRequest {
+  Font font = 1;
+  // Each character in this string is looked up independently via the
+  // font's cmap (nominal glyph mapping) — NOT shaped, so no ligatures/
+  // reordering/positioning are applied. Use ShapeText for that; use this
+  // node to inspect a font's raw per-character metrics. Capped at 10,000
+  // UTF-16 code units.
+  string text = 2;
+  // Scale metrics to this size (same unit convention as
+  // ShapeTextRequest.font_size). 0 (default) returns raw font units.
+  float font_size = 3;
+}
+
+// A single character's direct (unshaped) glyph metrics.
+message CharGlyphMetrics {
+  // The Unicode code point looked up.
+  uint32 codepoint = 1;
+  uint32 glyph_id = 2;
+  string glyph_name = 3;
+  // False if the font has no glyph for this code point (glyph_id/name/
+  // metrics are then the font's .notdef glyph 0, reported for
+  // completeness but not a real per-character glyph).
+  bool glyph_found = 4;
+  double advance_x = 5;
+  double advance_y = 6;
+  // The glyph's ink bounding box, relative to the glyph origin. Scaled by
+  // the same font_size/divisor convention as the advances above.
+  double bearing_x = 7;
+  double bearing_y = 8;
+  double extent_width = 9;
+  double extent_height = 10;
+}
+
+message GetGlyphMetricsResponse {
+  repeated CharGlyphMetrics glyphs = 1;
+  Error error = 2;
+}
+
+message GetFontNameTableRequest {
+  Font font = 1;
+}
+
+// One entry from the font's `name` table.
+message NameRecord {
+  // Predefined OpenType name ID (1=Family, 2=Subfamily, 4=Full name,
+  // 5=Version, 6=PostScript name, 16=Typographic Family, 17=Typographic
+  // Subfamily, etc. — see the OpenType spec's Name IDs table). Values
+  // above 255 are font-specific/custom names.
+  uint32 name_id = 1;
+  // BCP 47 language tag this entry is recorded under (HarfBuzz resolves
+  // the table's raw platform/encoding/language IDs to this for you).
+  string language = 2;
+  string value = 3;
+}
+
+message GetFontNameTableResponse {
+  repeated NameRecord names = 1;
+  // Convenience extractions of the most common name IDs, in English
+  // ("en") when available, else the font's first recorded language for
+  // that ID. Empty string if the font has no such entry.
+  string family = 2;
+  string subfamily = 3;
+  string full_name = 4;
+  string version = 5;
+  string postscript_name = 6;
+  Error error = 7;
+}
+
+message GetVariableFontAxesRequest {
+  Font font = 1;
+}
+
+// One variation axis of an OpenType Variable Font.
+message VariableAxis {
+  // 4-letter axis tag, e.g. "wght" (weight), "wdth" (width), "ital"
+  // (italic), "slnt" (slant), "opsz" (optical size), or a custom tag.
+  string tag = 1;
+  // The axis's display name, resolved from the font's `name` table via
+  // its name_id (empty if unavailable).
+  string name = 2;
+  double min_value = 3;
+  double default_value = 4;
+  double max_value = 5;
+  // Whether the font hides this axis from user-facing UI (the OpenType
+  // HIDDEN_AXIS flag).
+  bool hidden = 6;
+}
+
+message GetVariableFontAxesResponse {
+  // False for a static (non-variable) font — axes is then empty, which
+  // is the expected, non-error result, not a failure.
+  bool is_variable = 1;
+  repeated VariableAxis axes = 2;
+  Error error = 3;
+}
+
+message SubsetFontRequest {
+  Font font = 1;
+  // Retain only the glyphs needed to render this text (looked up via
+  // cmap, plus everything HarfBuzz's subsetter determines is needed to
+  // keep those glyphs shaping correctly, e.g. ligature/mark-attachment
+  // closure). Capped at 10,000 UTF-16 code units. At least one of `text`
+  // or `unicode_codepoints` must be non-empty.
+  string text = 2;
+  // Additional/alternative code points to retain, as raw Unicode scalar
+  // values, for callers that already have a code-point set rather than a
+  // string (e.g. deduplicated across many documents).
+  repeated uint32 unicode_codepoints = 3;
+  // Keep the font's glyph names, hinting instructions, and layout
+  // (GSUB/GPOS) tables in the subset. Default false produces the
+  // smallest possible subset (drops names/hints/layout — fine for
+  // rendering-only use); set true to keep the subset shapeable/
+  // introspectable by this same package's other nodes.
+  bool retain_layout_tables = 4;
+}
+
+message SubsetFontResponse {
+  // The subsetted font, as a new standalone sfnt file.
+  bytes subset_font_data = 1;
+  int32 original_size_bytes = 2;
+  int32 subset_size_bytes = 3;
+  int32 original_num_glyphs = 4;
+  int32 subset_num_glyphs = 5;
+  Error error = 6;
+}

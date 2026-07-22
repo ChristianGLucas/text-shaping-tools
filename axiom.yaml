@@ -1,0 +1,50 @@
+name: christiangeorgelucas/text-shaping-tools
+version: 0.1.0
+language: python
+description: Composable text-shaping and OpenType font-introspection nodes wrapping HarfBuzz (the shaping engine behind Chrome, Android, and LibreOffice) via its official Python binding uharfbuzz (Apache-2.0; HarfBuzz itself "Old MIT" -- both permissive, verified from source). Shape a Unicode string with a font into a positioned glyph run (glyph IDs, cluster indices, x/y advances/offsets), Unicode-aware and OpenType-feature-aware across simple and complex scripts (Arabic joining, ligatures, kerning, contextual alternates). Also introspect a font's OpenType layout features and scripts, global and per-glyph metrics, name table, variable-font axes, and subset a font down to only the glyphs a given text needs. Eight nodes, one canonical Font envelope (font_data capped at 2 MiB, conservative headroom under Axiom's node transport ceiling), all stateless and deterministic -- no network, no wall-clock, no randomness, and buffer language is never inferred from the host OS locale (a common HarfBuzz-integration pitfall that would make output depend on where the node happens to run).
+license: MIT
+author: Christian George Lucas
+tags:
+  - text-shaping
+  - typography
+  - opentype
+  - harfbuzz
+  - font
+  - glyph
+  - unicode
+  - kerning
+  - ligature
+  - variable-font
+nodes:
+    - name: ShapeText
+      input: ShapeTextRequest
+      output: ShapeTextResponse
+      description: Shape a Unicode text string with a font via HarfBuzz, returning the positioned glyph run -- each glyph's ID, name, source-character cluster index, and x/y advance/offset. Script and direction are inferred from the Unicode text itself when left empty (deterministic); language defaults to "en" when left empty (never inferred from the host OS locale, unlike a naive HarfBuzz integration -- that would make output nondeterministic across deployment environments). Explicit OpenType feature settings (e.g. disable ligatures, enable small caps) can be layered on the shaper's script defaults, optionally restricted to a character-cluster range. font_size scales advances/offsets to that unit; 0 (default) returns raw font design units (see GetFontMetrics.units_per_em).
+    - name: ListFontFeatures
+      input: ListFontFeaturesRequest
+      output: ListFontFeaturesResponse
+      description: List every OpenType layout feature (GSUB substitution -- ligatures, alternates -- and GPOS positioning -- kerning, mark attachment) a font declares, broken down by script and by every language system under that script, plus the overall union across the whole font. The quick way to answer "does this font support ligatures/kerning/small-caps, and for which scripts."
+    - name: ListFontScripts
+      input: ListFontScriptsRequest
+      output: ListFontScriptsResponse
+      description: List every script a font's OpenType layout tables (GSUB and/or GPOS) declare support for, as both the font's raw OpenType script tag (e.g. "arab", "DFLT") and the ISO 15924 tag HarfBuzz resolves it to (e.g. "Arab"; empty when the OT tag has no Unicode-script mapping). Feeds directly into ShapeText's script field.
+    - name: GetFontMetrics
+      input: GetFontMetricsRequest
+      output: GetFontMetricsResponse
+      description: Get a font's global metrics -- units-per-em (the design-grid scale every raw-font-unit value elsewhere in this package is on), recommended ascender/descender/line-gap for default horizontal line layout, total glyph count, whether it's an OpenType Variable Font, and whether it declares any GSUB/GPOS layout rules at all.
+    - name: GetGlyphMetrics
+      input: GetGlyphMetricsRequest
+      output: GetGlyphMetricsResponse
+      description: Look up each character in a string directly via the font's cmap (nominal-glyph mapping) -- not shaped, so no ligatures/reordering/positioning (use ShapeText for that). Returns each character's glyph ID, glyph name, horizontal/vertical advance, and ink-extent bounding box; a character with no glyph in the font is reported as not-found against the .notdef glyph rather than silently substituting a guess.
+    - name: GetFontNameTable
+      input: GetFontNameTableRequest
+      output: GetFontNameTableResponse
+      description: Read every entry in a font's OpenType `name` table (every name-ID/language pair the font declares), plus convenience extractions of the most common IDs -- family, subfamily, full name, version, PostScript name -- preferring the English entry when the font has one.
+    - name: GetVariableFontAxes
+      input: GetVariableFontAxesRequest
+      output: GetVariableFontAxesResponse
+      description: List an OpenType Variable Font's variation axes (e.g. "wght" weight, "wdth" width, "opsz" optical size) with their min/default/max values and display name. A static (non-variable) font is not an error -- is_variable is simply false and axes is empty.
+    - name: SubsetFont
+      input: SubsetFontRequest
+      output: SubsetFontResponse
+      description: Subset a font down to only the glyphs needed to render given text and/or Unicode code points, via HarfBuzz's subsetter (the same engine behind Google Fonts' and Chrome's web-font size reduction). Produces the smallest possible subset by default (drops hinting and GSUB/GPOS/GDEF layout tables); set retain_layout_tables to keep glyph names and layout tables so the subset stays shapeable/introspectable by this package's other nodes.
