@@ -80,7 +80,7 @@ message Error {
 
 // A font, as raw bytes plus which face to use if it is a collection.
 message Font {
-  // Raw font file bytes (TTF/OTF/TTC). Capped at 3 MiB.
+  // Raw font file bytes (TTF/OTF/TTC). Capped at 2 MiB.
   bytes font_data = 1;
   // Index of the face to use within a TTC/collection. 0 for an ordinary
   // single-face font (the default and common case).
