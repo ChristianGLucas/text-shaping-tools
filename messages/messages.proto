@@ -37,14 +37,16 @@ package christiangeorgelucas.text_shaping_tools;
 // INVALID_FONT error, never a crash — HarfBuzz degrades to an empty face
 // (glyph_count 0), which every node detects explicitly.
 //
-// SIZE BOUND. `font_data` is capped at 2 MiB (comfortably covers a normal
-// desktop/web font, including a modest variable font) and `text` is capped
-// at 10,000 UTF-16 code units. The 2 MiB font cap is deliberately
-// conservative relative to Axiom's own ~4 MiB node transport ceiling,
-// because the JSON/HTTP bridge base64-encodes `bytes` fields (~+33% over
-// the wire) -- a naive 3 MiB cap would land right at that ceiling instead
-// of comfortably under it. Oversized input returns a structured TOO_LARGE
-// error before any parsing/shaping work begins.
+// SIZE BOUND. `font_data` is capped at 640 KiB and `text` is capped at
+// 10,000 UTF-16 code units. The font cap is deliberately conservative:
+// the deployed invocation ingress in front of this package enforces an
+// ~1 MiB request-body ceiling (undocumented, invisible to local testing,
+// found only by probing the deployed endpoint), and the JSON/HTTP bridge
+// base64-encodes `bytes` fields (~+33% over the wire) -- 640 KiB raw
+// leaves comfortable headroom under that ceiling for the rest of the
+// request. A caller with a larger font should subset it first with
+// SubsetFont. Oversized input returns a structured TOO_LARGE error
+// before any parsing/shaping work begins.
 //
 // DETERMINISM. Every node is a pure function of its input fields. Unlike a
 // naive HarfBuzz integration, buffer language is NEVER inferred from the
@@ -80,7 +82,8 @@ message Error {
 
 // A font, as raw bytes plus which face to use if it is a collection.
 message Font {
-  // Raw font file bytes (TTF/OTF/TTC). Capped at 2 MiB.
+  // Raw font file bytes (TTF/OTF/TTC). Capped at 640 KiB -- subset a
+  // larger font first with SubsetFont.
   bytes font_data = 1;
   // Index of the face to use within a TTC/collection. 0 for an ordinary
   // single-face font (the default and common case).

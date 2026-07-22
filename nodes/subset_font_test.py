@@ -12,7 +12,7 @@ def test_subset_font_shrinks_and_produces_valid_font():
     ax = FakeAxiomContext()
     result = subset_font(ax, SubsetFontRequest(font=dejavu_sans_font(), text="AB"))
     assert result.error.code == ""
-    assert result.original_num_glyphs == 6253
+    assert result.original_num_glyphs == 120
     assert result.subset_num_glyphs == 3
     assert result.subset_size_bytes < result.original_size_bytes
     assert oracle_is_structurally_valid_sfnt(result.subset_font_data)

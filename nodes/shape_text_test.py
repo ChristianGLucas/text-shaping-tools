@@ -4,17 +4,18 @@ from nodes.testkit import FakeAxiomContext, dejavu_sans_bytes, dejavu_sans_font
 
 
 def test_shape_text_ligature_formed_by_default():
-    """DejaVu Sans defines an 'fi' ligature glyph (hand-verified: glyph ID
-    5042, glyph name "fi") and enables the 'liga' feature by default for
-    the "latn" script. Shaping the two letters "fi" must produce exactly
-    one glyph named "fi" whose cluster is the first character.
+    """DejaVu Sans defines an 'fi' ligature glyph (hand-verified against
+    our subsetted test fixture: glyph ID 116, glyph name "fi") and enables
+    the 'liga' feature by default for the "latn" script. Shaping the two
+    letters "fi" must produce exactly one glyph named "fi" whose cluster
+    is the first character.
     """
     ax = FakeAxiomContext()
     result = shape_text(ax, ShapeTextRequest(font=dejavu_sans_font(), text="fi"))
     assert result.error.code == ""
     assert len(result.glyphs) == 1
     assert result.glyphs[0].glyph_name == "fi"
-    assert result.glyphs[0].glyph_id == 5042
+    assert result.glyphs[0].glyph_id == 116
     assert result.glyphs[0].cluster == 0
     assert result.resolved_script == "Latn"
     assert result.resolved_language == "en"
@@ -102,7 +103,7 @@ def test_shape_text_malformed_script_tag_is_rejected_not_truncated():
 
 def test_shape_text_oversized_font_is_structured_error():
     ax = FakeAxiomContext()
-    oversized = dejavu_sans_bytes() + b"0" * (2 * 1024 * 1024)
+    oversized = dejavu_sans_bytes() + b"0" * (700 * 1024)
     result = shape_text(ax, ShapeTextRequest(font=Font(font_data=oversized), text="a"))
     assert result.error.code == "TOO_LARGE"
 

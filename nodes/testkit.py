@@ -49,11 +49,16 @@ def _load_fixture_bytes(filename: str) -> bytes:
 
 
 def dejavu_sans_bytes() -> bytes:
-    """DejaVu Sans (Bitstream Vera License, permissive) -- a static TTF with
-    Latin/Cyrillic/Greek/Arabic/etc. cmap coverage and modest GSUB/GPOS
-    (ccmp/dlig/kern) layout data. Our general-purpose shaping fixture.
+    """A HarfBuzz-subsetted slice of DejaVu Sans (Bitstream Vera License,
+    permissive; a subset is a derivative the license explicitly permits),
+    kept under this package's own MAX_FONT_BYTES cap. Subsetted (with
+    retain_layout_tables=true) down to printable ASCII + "fi"/"fl" -- still
+    covers the "latn"/"arab"/"DFLT" GSUB/GPOS script/feature entries (a
+    subsetted ScriptList keeps its script entries even when a script's own
+    glyphs are pruned) and the 'fi' ligature this package's tests exercise.
+    Our general-purpose shaping fixture.
     """
-    return _load_fixture_bytes("DejaVuSans.ttf")
+    return _load_fixture_bytes("DejaVuSans-subset.ttf")
 
 
 def dejavu_sans_font(face_index: int = 0) -> Font:

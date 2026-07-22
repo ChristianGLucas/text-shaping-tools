@@ -10,13 +10,16 @@ import uharfbuzz as hb
 from gen.messages_pb2 import Error
 
 # A font blob is untrusted input the caller fully controls; bound its size
-# before any parsing happens. 2 MiB covers a normal desktop/web font
-# (including a modest variable font) with real headroom under Axiom's own
-# ~4 MiB node gRPC transport ceiling -- deliberately conservative because
-# the JSON/HTTP bridge base64-encodes bytes fields (~+33% over the wire),
-# so a naive 3 MiB cap would land right at the transport ceiling instead
-# of comfortably under it.
-MAX_FONT_BYTES = 2 * 1024 * 1024
+# before any parsing happens. 640 KiB is deliberately conservative: the
+# deployed HTTP/JSON invocation ingress in front of this package enforces
+# an ~1 MiB REQUEST BODY ceiling (verified empirically against the
+# deployed endpoint -- not documented anywhere, and invisible to local
+# `axiom dev`/unit testing), and the JSON bridge base64-encodes `bytes`
+# fields (~+33% over the wire). 640 KiB raw -> ~875 KB base64, leaving
+# ~170 KB of headroom under that 1 MiB ceiling for the rest of the
+# request (other fields, JSON structure). A caller with a larger font
+# should subset it first with this package's own SubsetFont node.
+MAX_FONT_BYTES = 640 * 1024
 
 # Shaping/metric cost scales with text length; bound it before any
 # HarfBuzz call. 10,000 UTF-16 code units is ample for any single
